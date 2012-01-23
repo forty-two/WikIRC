@@ -13,6 +13,9 @@ def loadConfig():
     try:
         configFile = open('config.json')
         config = json.load(configFile)
+        # data must not be unicode, twisted throws a fit if it is
+        for key in config:
+            config[key] = config[key].encode('ascii', 'ignore')
         return config
     except:
         return None
@@ -26,7 +29,7 @@ def writeDefaultConfig():
                      'IRC_channel'  : 'WikIRC_testing_channel',
                      }
     configFile = open('config.json', 'w')
-    configFile.write(json.dumps(defaultConfig, indent = 4))
+    configFile.write(json.dumps(defaultConfig, indent = 4, encoding = 'ASCII'))
 
 def main():
     ircInput = Queue.Queue()
