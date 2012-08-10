@@ -82,8 +82,9 @@ class IRCBot(irc.IRCClient):
                 wikiRequest.addCallback(self.commandsCallback)
             elif command in localHandlers:
                 self.commandsCallback(localHandlers[command](*options))
-            else:
-                self.msg(self.factory.channel, "Command {} not known".format(command))
+            # activate following if desired, but will respond to anything that appears to be a command (e.g. other bots commands)
+            # else:
+            #     self.msg(self.factory.channel, "Command {} not known".format(command))
 
     def commandsCallback(self, response):
         response = response.encode('UTF-8', 'ignore')
