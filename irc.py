@@ -27,10 +27,9 @@ class IRCBot(irc.IRCClient):
         deferredCheck.addCallback(self.checkWikiCallback)
 
     def checkWikiCallback(self, changes):
-        print "Wiki callback activated"
+        print "Wiki checked at {}".format(time.ctime())
         for change in changes:
             if change:
-                print change
                 self.msg(self.factory.channel, change.encode('UTF-8', 'ignore'))
     
     def connectionMade(self):
