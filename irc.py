@@ -1,70 +1,54 @@
 #! /usr/bin/python
 
 import json
-import threading
 import time
 
 # non stdlib internal
 import permissions
+import wiki
 
 # non stdlib external
 from twisted.words.protocols import irc
-from twisted.internet import reactor, protocol
+from twisted.internet import reactor, protocol, task, threads, defer
 
 
-class IRCReadInThread(threading.Thread):
-    def __init__(self, inputQueue, IRCInstance):
-        self.inputQueue = inputQueue
-        self.IRCInstance = IRCInstance
-        self.channel = IRCInstance.factory.channel
-        self.continueRunning = True
-        threading.Thread.__init__(self)
-        
-    def run(self):
-        while self.continueRunning:
-            message = self.inputQueue.get()
-            if message is "quit":
-                self.continueRunning = False
-            else:
-                self.IRCInstance.say(self.channel, message.encode('ascii', 'ignore'), length = 510)
-                time.sleep(1)
-            
-
-class CommandHandler:
-    def __init__(self, IRCInstance, inputQueue, outputQueue):
-        self.IRCInstance = IRCInstance
-        self.channel = self.IRCInstance.factory.channel
-        self.inputQueue = inputQueue
-        self.outputQueue = outputQueue
+class IRCBot(irc.IRCClient):
+    
+    def __init__(self, nickname):
+        print "In ircbot"
+        self.nickname = nickname
+        self.checkLoop = task.LoopingCall(self.checkWiki)
+        print "Created checkloop"
         self.authChecker = permissions.AuthHandler("WikIRC_user_permissions.json")
-        
-        self.handlers = {'addhostmask'   : self.addUserHostmask,
-                         'adduser'       : self.addUser,
-                         'addusergroup'  : self.addUserGroup,
-                         'block'         : self.blockUser,
-                         'blockdelete'   : self.blockdeleteUser,
-                         'delete'        : self.deletePage,
-                         'wikihelp'      : self.helpMessage,
-                         'permshelp'     : self.permsHelpMessage,
-                         'removehostmask': self.removeUserHostmask,
-                         'removegroup'   : self.removePermissionGroup,
-                         'removeuser'    : self.removeUser,
-                         }
-        
         self.commandPermissions = {'admin': ['*']}
+
+    def checkWiki(self):
+        deferredCheck = threads.deferToThread(self.factory.wikiHandler.recentChanges)
+        deferredCheck.addCallback(self.checkWikiCallback)
+
+    def checkWikiCallback(self, changes):
+        print "Wiki callback activated"
+        for change in changes:
+            if change:
+                print change
+                self.msg(self.factory.channel, change.encode('UTF-8', 'ignore'))
+    
+    def connectionMade(self):
+        irc.IRCClient.connectionMade(self)
         
-    def handleCommand(self, username, hostmask, command, options):
-        print "handling command: "+command
-        command = command.lower()
-        options = options.split(' ')
-        if command in self.handlers:
-            print "command in handlers"
-            
-            if self.isAuthorised(command, username, hostmask):
-                self.handlers[command](*options)
-            else:
-                self.IRCInstance.say(self.channel, "Incorrect permission group for this command.")
-            
+
+    def connectionLost(self, reason):
+        irc.IRCClient.connectionLost(self, reason)
+
+    def signedOn(self):
+        self.join(self.factory.channel)
+        print("Succesfully signed into IRC server")
+        
+
+    def joined(self, channel):
+        print("Succesfully joined channel %s" % channel)
+        self.checkLoop.start(60)
+
     def isAuthorised(self, command, username, hostmask):
         userPermissions = self.authChecker.get_user_permissions(username, hostmask)
         print username
@@ -76,114 +60,86 @@ class CommandHandler:
                     return True
                 if "*" in self.commandPermissions.get(group, []):
                     return True
-        return False                  
+        return False
+
+    def handleCommands(self, user, hostmask, command, options):
+        wikiHandlers = {'block'         : self.factory.wikiHandler.blockUser,
+                        'blockdelete'   : self.factory.wikiHandler.blockAndRemovePages,
+                        'delete'        : self.factory.wikiHandler.deletePage,
+                        }
+        localHandlers = {'addhostmask'   : self.addUserHostmask,
+                         'adduser'       : self.addUser,
+                         'addusergroup'  : self.addUserGroup,
+                         'wikihelp'      : self.helpMessage,
+                         'permshelp'     : self.permsHelpMessage,
+                         'removehostmask': self.removeUserHostmask,
+                         'removegroup'   : self.removePermissionGroup,
+                         'removeuser'    : self.removeUser,
+                        }
+
+        if self.isAuthorised(command, user, hostmask):
+            if command in wikiHandlers:
+                wikiRequest = threads.deferToThread(wikiHandlers[command], *options)
+                wikiRequest.addCallback(self.commandsCallback)
+            elif command in localHandlers:
+                self.commandsCallback(localHandlers[command](*options))
+            else:
+                self.msg(self.factory.channel, "Command {} not known".format(command))
+
+    def commandsCallback(self, response):
+        print('Command callback activated for response {}'.format(response))
+        self.msg(self.factory.channel, response.encode('UTF-8', 'ignore'))
+
 
     def addUserHostmask(self, *args):
         if len(args) == 2:
             self.authChecker.add_user_hostmask(args[0], args[1])
-            self.IRCInstance.say(self.channel, "Added hostmask %s to user %s" % (args[1], args[0]))
+            return "Added hostmask %s to user %s" % (args[1], args[0])
         else:
-            self.IRCInstance.say(self.channel, "Incorrect usage, use .addhostmask username hostmask")
+            return "Incorrect usage, use .addhostmask username hostmask"
         
     def addUser(self, *args):
         if len(args) == 3:
             self.authChecker.add_user(args[0], args[1], args[2])
-            self.IRCInstance.say(self.channel, "Created user %s" % (args[0]))
+            return "Created user %s" % (args[0])
         else:
-            self.IRCInstance.say(self.channel, "Incorrect usage, use .adduser username hostmask group")
+            return "Incorrect usage, use .adduser username hostmask group"
             
     def addUserGroup(self, *args):
         if len(args) == 2:
             self.authChecker.add_user_group(args[0], args[1])
-            self.IRCInstance.say(self.channel, "Added user %s to group %s" % (args[0], args[1]))
+            return "Added user %s to group %s" % (args[0], args[1])
         else:
-            self.IRCInstance.say(self.channel, "Incorrect usage, use .addusergroup username group")
-            
-    def blockUser(self, *args):
-        if len(args) == 1:
-            data  = {'command' : 'block',
-                     'options': args
-                     }
-            self.outputQueue.put(json.dumps(data))
-        else:
-            self.IRCInstance.say(self.channel, "Incorrect usage, use .block username")
-            
-    def blockdeleteUser(self, *args):
-        if len(args) == 1:
-            data = {'command' : 'blockdelete',
-                    'options': args
-                    }
-            self.outputQueue.put(json.dumps(data))
-        else:
-            self.IRCInstance.say(self.channel, "Incorrect usage, use .blockdelete username")
-            
-    def deletePage(self, *args):
-        if len(args) == 1:
-            data = {'command' : 'delete',
-                    'options': args
-                    }
-            self.outputQueue.put(json.dumps(data))
-        else:
-            self.IRCInstance.say(self.channel, "Incorrect usage, use .delete pagename")
+            return "Incorrect usage, use .addusergroup username group"
+
             
     def helpMessage(self, *args):
-        self.IRCInstance.say(self.channel, "Commands avaliable: .block username, .blockdelete username,"
-                             " .delete pagename, .permshelp")
+        return "Commands avaliable: .block username, .blockdelete username, .delete pagename, .permshelp"
         
     def permsHelpMessage(self, *args):
-        self.IRCInstance.say(self.channel, "Commands availible: .adduser username hostname group, "
-                             ".addhostmask username hostmask, .removeuser username, "
-                             ".removehostmask username hostmask"
-                             )
+        return "Commands availible: .adduser username hostname group, .addhostmask username hostmask, .removeuser username, .removehostmask username hostmask"
+                             
         
     def removeUserHostmask(self, *args):
         if len(args) == 2:
             self.authChecker.remove_user_hostmask(args[0], args[1])
-            self.IRCInstance.say(self.channel, "Removed hostmask %s from user %s" % (args[0], args[1]))
+            return "Removed hostmask %s from user %s" % (args[0], args[1])
         else:
-            self.IRCInstance.say(self.channel, "Incorrect usage, use .removehostmask username hostmask")
+            return "Incorrect usage, use .removehostmask username hostmask"
             
     def removePermissionGroup(self, *args):
         if len(args) == 1:
             self.authChecker.remove_group(args[0])
-            self.IRCInstance.say(self.channel, "Removed permission group %s" % args[0])
+            return "Removed permission group %s" % args[0]
         else:
-            self.IRCInstance.say(self.channel, "Incorrect usage, use .removegroup groupName")
+            return "Incorrect usage, use .removegroup groupName"
     
     def removeUser(self, *args):
         if len(args) == 1:
             self.authChecker.remove_user(args[0])
-            self.IRCInstance.say(self.channel, "Removed user %s" % args[0])
+            return "Removed user %s" % args[0]
         else:
-            self.IRCInstance.say(self.channel, "Incorrect usage, use .removeuser username")
-
-
-class IRCBot(irc.IRCClient):
-    
-    def __init__(self, nickname):
-        self.nickname = nickname
-    
-    def connectionMade(self):
-        irc.IRCClient.connectionMade(self)
-        
-
-    def connectionLost(self, reason):
-        irc.IRCClient.connectionLost(self, reason)
-
-    # callbacks for events
-
-    def startIOHandlers(self):
-        self.commandHandler = CommandHandler(self, self.factory.inputQueue, self.factory.outputQueue)
-        self.queueOutputThread = IRCReadInThread(self.factory.inputQueue, self)
-        self.queueOutputThread.start()
-
-    def signedOn(self):
-        self.join(self.factory.channel)
-        print("Succesfully signed into IRC server")
-        self.startIOHandlers()
-
-    def joined(self, channel):
-        print("Succesfully joined channel %s" % channel)
+            return "Incorrect usage, use .removeuser username"
 
     def privmsg(self, user, channel, msg):
         userName = user.split('!', 1)[0]
@@ -199,23 +155,22 @@ class IRCBot(irc.IRCClient):
         print msg
         if msg.startswith('.'):
             print "sending command"
-            msg = msg.split(' ', 1)
+            msg = msg.split(' ')
             command = msg[0].strip('.')
             if len(msg) > 1:
-                options = msg[1]
+                options = msg[1:]
             else:
-                options = ""
-            self.commandHandler.handleCommand(userName, userHostmask, command, options)
+                options = None
+            self.handleCommands(userName, userHostmask, command, options)
 
-class IRCFactory(protocol.ClientFactory):
-
-
-    def __init__(self, nickname, channel, inputQueue, outputQueue):
+class WikIRCFactory(protocol.ClientFactory):
+    def __init__(self, nickname, channel, apiURL, wikiUser, wikiPass):
+        print "in WikIRCFactory"
         self.nickname = nickname
         self.channel = channel
-        self.inputQueue = inputQueue
-        self.outputQueue = outputQueue
-        print "in IRCFactory"
+        self.wikiHandler = wiki.WikiHandler(apiURL, wikiUser, wikiPass)
+        self.wikiHandler.connect()
+
         
     def buildProtocol(self, addr):
         p = IRCBot(self.nickname)
@@ -228,16 +183,5 @@ class IRCFactory(protocol.ClientFactory):
 
     def clientConnectionFailed(self, connector, reason):
         print "connection failed:", reason
-        reactor.stop()
+        reactor.stop()    
 
-
-
-
-def start(inputQueue, outputQueue, nickname, channel, server, port = 6667):
-    factory = IRCFactory(nickname, channel, inputQueue, outputQueue)
-
-    # connect factory to this host and port
-    reactor.connectTCP(server, port, factory)
-
-    # run bot
-    reactor.run()

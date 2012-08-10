@@ -1,6 +1,5 @@
 #! /usr/bin/python
 
-import Queue
 import json
 import sys
 
@@ -8,6 +7,7 @@ import sys
 import irc
 import wiki
 
+from twisted.internet import reactor
 
 def loadConfig():
     try:
@@ -32,8 +32,6 @@ def writeDefaultConfig():
     configFile.write(json.dumps(defaultConfig, indent = 4, encoding = 'ASCII'))
 
 def main():
-    ircInput = Queue.Queue()
-    wikiInput = Queue.Queue()
     config = loadConfig()
     if not config:
         writeDefaultConfig()
@@ -43,14 +41,11 @@ def main():
         print("----------")
 
         sys.exit()
-
-    wikiChecker = wiki.WikiHandler(config['wiki_API_URL'], config['wiki_username'],
-                                   config['wiki_password'], wikiInput, ircInput)
-    wikiChecker.connect()
-    wikiChecker.startChecking()        
-    
-    irc.start(ircInput, wikiInput, config['IRC_nickname'], config['IRC_channel'],
-              config['IRC_server'])
+     
+    f = irc.WikIRCFactory(config['IRC_nickname'], config['IRC_channel'], config['wiki_API_URL'],
+                                 config['wiki_username'], config['wiki_password'])
+    reactor.connectTCP(config['IRC_server'], 6667, f)
+    reactor.run()
 
 if __name__ == '__main__':
     main()
