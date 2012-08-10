@@ -44,20 +44,24 @@ class AuthHandler():
         else:
             return None
 
-    def remove_group(self, groupName):
-        for user in self.config:
-            if groupName in self.config['user']['groups']:
-                self.config['user']['groups'].pop(groupName)
+    def remove_group(self, user, groupName):
+        if user in self.config:
+            if groupName in self.config[user]['groups']:
+                self.config[user]['groups'].remove(groupName)
+                self._save_config()
                                             
     def remove_user(self, username):
         username = username.lower()
-        self.config.pop(username)
-        self._save_config()
+        try:
+            self.config.pop(username)
+            self._save_config()
+        except KeyError:
+            return False
 
     def remove_user_hostmask(self, username, hostmask):
         username = username.lower()
         try:
-            self.config[username]['hostmasks'].pop(hostmask)
+            self.config[username]['hostmasks'].remove(hostmask)
             self._save_config()
         except KeyError:
             return False

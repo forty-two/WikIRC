@@ -87,8 +87,9 @@ class IRCBot(irc.IRCClient):
                 self.msg(self.factory.channel, "Command {} not known".format(command))
 
     def commandsCallback(self, response):
+        response = response.encode('UTF-8', 'ignore')
         print('Command callback activated for response {}'.format(response))
-        self.msg(self.factory.channel, response.encode('UTF-8', 'ignore'))
+        self.msg(self.factory.channel, response)
 
 
     def addUserHostmask(self, *args):
@@ -123,16 +124,16 @@ class IRCBot(irc.IRCClient):
     def removeUserHostmask(self, *args):
         if len(args) == 2:
             self.authChecker.remove_user_hostmask(args[0], args[1])
-            return "Removed hostmask %s from user %s" % (args[0], args[1])
+            return "Removed hostmask %s from user %s" % (args[1], args[0])
         else:
             return "Incorrect usage, use .removehostmask username hostmask"
             
     def removePermissionGroup(self, *args):
-        if len(args) == 1:
-            self.authChecker.remove_group(args[0])
-            return "Removed permission group %s" % args[0]
+        if len(args) == 2:
+            self.authChecker.remove_group(args[0], args[1])
+            return "Removed permission group %s from user %s" % (args[1], args[0])
         else:
-            return "Incorrect usage, use .removegroup groupName"
+            return "Incorrect usage, use .removegroup username groupName"
     
     def removeUser(self, *args):
         if len(args) == 1:
@@ -142,6 +143,7 @@ class IRCBot(irc.IRCClient):
             return "Incorrect usage, use .removeuser username"
 
     def privmsg(self, user, channel, msg):
+        msg = msg.decode('UTF-8', 'ignore')
         userName = user.split('!', 1)[0]
         userHostmask = user.split('@', 1)[1]
         
@@ -160,7 +162,7 @@ class IRCBot(irc.IRCClient):
             if len(msg) > 1:
                 options = msg[1:]
             else:
-                options = None
+                options = []
             self.handleCommands(userName, userHostmask, command, options)
 
 class WikIRCFactory(protocol.ClientFactory):
