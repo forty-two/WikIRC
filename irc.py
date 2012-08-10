@@ -17,6 +17,10 @@ class IRCBot(irc.IRCClient):
     def __init__(self, nickname):
         print "In ircbot"
         self.nickname = nickname
+        self.realname = "WikIRC 0.2"
+        self.versionName = "WikIRC - https://github.com/forty-two/WikIRC"
+        self.versionNum = 0.2
+        self.lineRate = 1
         self.checkLoop = task.LoopingCall(self.checkWiki)
         print "Created checkloop"
         self.authChecker = permissions.AuthHandler("WikIRC_user_permissions.json")
@@ -37,6 +41,7 @@ class IRCBot(irc.IRCClient):
         
 
     def connectionLost(self, reason):
+        self.checkLoop.stop()
         irc.IRCClient.connectionLost(self, reason)
 
     def signedOn(self):
@@ -46,8 +51,7 @@ class IRCBot(irc.IRCClient):
 
     def joined(self, channel):
         print("Succesfully joined channel %s" % channel)
-        if not self.checkLoop.running:
-            self.checkLoop.start(60)
+        self.checkLoop.start(60)
 
     def isAuthorised(self, command, username, hostmask):
         userPermissions = self.authChecker.get_user_permissions(username, hostmask)
