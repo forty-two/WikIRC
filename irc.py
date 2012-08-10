@@ -24,7 +24,7 @@ class IRCBot(irc.IRCClient):
 
     def checkWiki(self):
         deferredCheck = threads.deferToThread(self.factory.wikiHandler.recentChanges)
-        deferredCheck.addCallback(self.checkWikiCallback)
+        deferredCheck.addCallbacks(self.checkWikiCallback, self.errorCallback)
 
     def checkWikiCallback(self, changes):
         print "Wiki checked at {}".format(time.ctime())
@@ -46,7 +46,8 @@ class IRCBot(irc.IRCClient):
 
     def joined(self, channel):
         print("Succesfully joined channel %s" % channel)
-        self.checkLoop.start(60)
+        if not self.checkLoop.running:
+            self.checkLoop.start(60)
 
     def isAuthorised(self, command, username, hostmask):
         userPermissions = self.authChecker.get_user_permissions(username, hostmask)
@@ -79,12 +80,15 @@ class IRCBot(irc.IRCClient):
         if self.isAuthorised(command, user, hostmask):
             if command in wikiHandlers:
                 wikiRequest = threads.deferToThread(wikiHandlers[command], *options)
-                wikiRequest.addCallback(self.commandsCallback)
+                wikiRequest.addCallbacks(self.commandsCallback, self.errorCallback)
             elif command in localHandlers:
                 self.commandsCallback(localHandlers[command](*options))
             # activate following if desired, but will respond to anything that appears to be a command (e.g. other bots commands)
             # else:
             #     self.msg(self.factory.channel, "Command {} not known".format(command))
+
+    def errorCallback(self, *args):
+        self.msg(self.factory.channel, "An error occurred while processing this request")
 
     def commandsCallback(self, response):
         response = response.encode('UTF-8', 'ignore')
