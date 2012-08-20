@@ -50,7 +50,8 @@ class WikiHandler():
     def userEdits(self, username):
         params = {'action' : 'query',
                   'list'   : 'usercontribs',
-                  'ucuser' : username
+                  'ucuser' : username,
+                  'uclimit': 1000
                   }
         response = wikitools.APIRequest(self.wiki, params).query(querycontinue = False)
         
@@ -61,11 +62,40 @@ class WikiHandler():
         page.delete(reason)
         return "Page {pageName} deleted".format(pageName = title)
         
-    def deleteAllPages(self, user):
+    def removeAllChanges(self, user):
         edits = self.userEdits(user)
         for edit in edits:
             if 'new' in edit.keys():
                 self.deletePage(edit['title'])
+            else:
+                self.revertPage(user, edit['title'])
+
+    def revertPage(self, user, title, reason = 'spam'):
+        page = wikitools.Page(self.wiki, title)
+        rollbackToken = self.getRollbackToken(page.pageid)
+        if rollbackToken:
+            params = {'action' : 'rollback',
+                      'title'  : title,
+                      'user'   : user,
+                      'token'  : rollbackToken,
+                      'markbot': 1
+                      }
+            response = wikitools.APIRequest(self.wiki, params).query(querycontinue = False)
+        return "Page {} reverted to previous edit".format(title)
+
+
+    def getRollbackToken(self, pageID):
+        params = {'action' : 'query',
+                  'prop'   : 'revisions',
+                  'rclimit': 1,
+                  'pageids' : pageID,
+                  'rvtoken': 'rollback'
+                 }
+        response = wikitools.APIRequest(self.wiki, params).query(querycontinue = False)
+        try:
+            return response['query']['pages'][str(pageID)]['revisions'][0]['rollbacktoken']
+        except KeyError:
+            return False
         
                 
     def blockUser(self, user, reason = 'spambot'):
@@ -74,7 +104,7 @@ class WikiHandler():
         return "User {username} blocked".format(username = user)
         
     def blockAndRemovePages(self, user):
-        self.deleteAllPages(user)
+        self.removeAllChanges(user)
         self.blockUser(user)
         return "User {username} blocked, pages deleted".format(username = user)
 

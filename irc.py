@@ -69,7 +69,9 @@ class IRCBot(irc.IRCClient):
     def handleCommands(self, user, hostmask, command, options):
         wikiHandlers = {'block'         : self.factory.wikiHandler.blockUser,
                         'blockdelete'   : self.factory.wikiHandler.blockAndRemovePages,
+                        'bd'            : self.factory.wikiHandler.blockAndRemovePages,
                         'delete'        : self.factory.wikiHandler.deletePage,
+                        'revert'        : self.factory.wikiHandler.revertPage,
                         }
         localHandlers = {'addhostmask'   : self.addUserHostmask,
                          'adduser'       : self.addUser,
