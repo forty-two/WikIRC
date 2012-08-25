@@ -51,7 +51,8 @@ class WikiHandler():
         params = {'action' : 'query',
                   'list'   : 'usercontribs',
                   'ucuser' : username,
-                  'uclimit': 1000
+                  'uclimit': 1000,
+                  'ucdir'  : 'newer'
                   }
         response = wikitools.APIRequest(self.wiki, params).query(querycontinue = False)
         
@@ -64,11 +65,14 @@ class WikiHandler():
         
     def removeAllChanges(self, user):
         edits = self.userEdits(user)
+        fixedTitles = []
         for edit in edits:
-            if 'new' in edit.keys():
-                self.deletePage(edit['title'])
-            else:
-                self.revertPage(user, edit['title'])
+            if edit['title'] not in fixedTitles:
+                fixedTitles.append(edit['title'])
+                if 'new' in edit.keys():
+                    self.deletePage(edit['title'])
+                else:
+                    self.revertPage(user, edit['title'])
 
     def revertPage(self, user, title, reason = 'spam'):
         page = wikitools.Page(self.wiki, title)
