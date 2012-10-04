@@ -104,7 +104,7 @@ class WikiHandler():
                 
     def blockUser(self, user, reason = 'spambot'):
         userObject = wikitools.User(self.wiki, user)
-        userObject.block(reason = reason, autoblock = True)
+        userObject.block(reason = reason, autoblock = True, expiry = 'never', nocreate = True)
         return "User {username} blocked".format(username = user)
         
     def blockAndRemovePages(self, user):
