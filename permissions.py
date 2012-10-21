@@ -38,6 +38,7 @@ class AuthHandler():
         return groupList
 
     def get_user_permissions(self, username, hostmask):
+        username = username.lower()
         knownHostmasks = self.config.get(username, {}).get('hostmasks', [])
         if hostmask in knownHostmasks:
             return self.config.get(username).get('groups')
