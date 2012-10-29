@@ -94,7 +94,7 @@ class IRCBot(irc.IRCClient):
             #     self.msg(self.factory.channel, "Command {} not known".format(command))
 
     def errorCallback(self, error):
-        self.msg(self.factory.channel, "An error occurred while processing this request")
+        self.msg(self.factory.channel, "An error occurred whilst processing the request: {}".format(error.getErrorMessage()))
         error.printTraceback()
 
     def commandsCallback(self, response):
