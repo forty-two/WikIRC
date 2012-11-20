@@ -3,7 +3,6 @@
 import time
 import re
 import datetime
-import json
 
 # non stdlib external
 import wikitools
@@ -58,7 +57,9 @@ class WikiHandler():
         
         return response['query']['usercontribs']
         
-    def deletePage(self, title, reason = 'spam'):
+    def deletePage(self, title, reason = 'spam', *args):
+        if args:
+            reason = "{} {}".format(reason, ' '.join(args))
         page = wikitools.Page(self.wiki, title)
         page.delete(reason)
         return "Page {pageName} deleted".format(pageName = title)
@@ -102,7 +103,9 @@ class WikiHandler():
             return False
         
                 
-    def blockUser(self, user, reason = 'spambot'):
+    def blockUser(self, user, reason = 'spambot', *args):
+        if args:
+            reason = "{} {}".format(reason, ' '.join(args))
         userObject = wikitools.User(self.wiki, user)
         userObject.block(reason = reason, autoblock = True, expiry = 'never', nocreate = True)
         return "User {username} blocked".format(username = user)
