@@ -122,6 +122,8 @@ class WikiHandler():
         
     def makeMessage(self, change):
         message = None
+        for key in change:
+            change[key] = change[key].decode('UTF-8', 'ignore')
         if not change['comment']:
             change['comment'] = '-'
         
