@@ -124,7 +124,7 @@ class WikiHandler():
         message = None
         for key in change:
             if isinstance(change[key], str) or isinstance(change[key], unicode):
-                change[key] = change[key].decode('UTF-8', 'ignore')
+                change[key] = change[key].encode('UTF-8', 'ignore')
         if not change['comment']:
             change['comment'] = '-'
         

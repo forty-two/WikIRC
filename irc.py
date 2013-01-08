@@ -34,7 +34,7 @@ class IRCBot(irc.IRCClient):
         print "Wiki checked at {}".format(time.ctime())
         for change in changes:
             if change:
-                self.msg(self.factory.channel, change.encode('UTF-8', 'ignore'))
+                self.msg(self.factory.channel, change)
     
     def connectionMade(self):
         irc.IRCClient.connectionMade(self)
@@ -94,7 +94,7 @@ class IRCBot(irc.IRCClient):
             #     self.msg(self.factory.channel, "Command {} not known".format(command))
 
     def errorCallback(self, error):
-        self.msg(self.factory.channel, "An error occurred whilst processing the request: {}".format(error.getErrorMessage()))
+        self.msg(self.factory.channel, "An error occurred whilst     processing the request: {}".format(error.getErrorMessage()))
         error.printTraceback()
 
     def commandsCallback(self, response):
