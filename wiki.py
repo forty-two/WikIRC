@@ -24,15 +24,22 @@ class WikiHandler():
             self.lastTimestamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         
         params = {'action' : 'query',
-                  'list'   : 'recentchanges',
-                  'rclimit': '25',
+                  'list'   : 'recentchanges|logevents',
+                  'rclimit': '50',
                   'rcstart': self.lastTimestamp,
                   'rcdir'  : 'newer',
-                  'rcprop' : 'user|timestamp|title|comment|loginfo'
+                  'rcprop' : 'user|timestamp|title|comment',
+                  'lelimit': '50',
+                  'lestart': self.lastTimestamp,
+                  'ledir'  : 'newer',
+                  'leprop' : 'user|timestamp|title|comment|type'
                   }
     
         response = wikitools.APIRequest(self.wiki, params).query(querycontinue = False)
-        recentChanges = response['query']['recentchanges']
+        recentChanges = response['query']['recentchanges'] + response['query']['logevents']
+
+        recentChanges = sorted(recentChanges, key = lambda x: x['timestamp'])
+
         if recentChanges:
             self.lastTimestamp = self.newTimeStamp(recentChanges[len(recentChanges)-1]['timestamp'])
 
@@ -123,26 +130,30 @@ class WikiHandler():
     def makeMessage(self, change):
         message = None
         for key in change:
-            if isinstance(change[key], str) or isinstance(change[key], unicode):
+            try:
                 change[key] = change[key].encode('UTF-8', 'ignore')
+            except:
+                pass
+
         if not change['comment']:
             change['comment'] = '-'
-        
+
+
         if change['type'] == 'new':
             message = "%s made new page titled %s with comment: %s" % (change['user'], change['title'], change['comment'])
         
         if change['type'] == 'edit':
             message = "%s edited %s with comment: %s" % (change['user'], change['title'], change['comment']) 
                 
-        if change['type'] == 'log':
-            if change['logtype'] == 'newusers':
-                message = "New user: %s" % change['user']
-                
-            if change['logtype'] == 'block':
-                message = '%s blocked user %s with comment %s' % (change['user'], change['title'].split(":", 1)[1],
-                                                                  change['comment'])
+
+        if change['type'] == 'newusers':
+            message = "New user: %s" % change['user']
             
-            if change['logtype'] == 'delete':
-                message = '%s deleted page %s with comment %s' % (change['user'], change['title'], change['comment'])
-                
+        if change['type'] == 'block':
+            message = '%s blocked user %s with comment %s' % (change['user'], change['title'].split(":", 1)[1],
+                                                              change['comment'])
+        
+        if change['type'] == 'delete':
+            message = '%s deleted page %s with comment %s' % (change['user'], change['title'], change['comment'])
+            
         return message if message else None
